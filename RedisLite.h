@@ -5,17 +5,19 @@
 #include<thread>
 #include<mutex>
 #include<condition_variable>
-
-enum class CommantdType{
+#include<future>
+enum class CommandType{
    SET,
    GET,
    DEL
 };
 
 struct Command{
-   CommantdType type;
+   CommandType type;
    std::string key;
    std::string value;
+
+   std::promise<std::string> result;
 };
 
 class RedisLite{

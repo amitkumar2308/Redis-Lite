@@ -1,19 +1,89 @@
 #include "RedisLite.h"
 
+RedisLite::RedisLite(){
+     worker = std::thread(&RedisLite::workerLoop,this);
+}
+
+RedisLite::~RedisLite(){
+     {
+          std::lock_guard<std::mutex> lock(queueMutex);
+          stop = true;
+     }
+     cv.notify_one();
+     worker.join();
+}
+
+void RedisLite::workerLoop(){
+     while(true){
+          Command cmd;
+          {
+               std::unique_lock<std::mutex> lock(queueMutex);
+               cv.wait(lock,[&](){
+                return !commandQueue.empty() || stop;
+               });
+
+               if(stop && commandQueue.empty())
+               break;
+
+               cmd = std::move(commandQueue.front());
+               commandQueue.pop();
+
+          }
+
+          if(cmd.type == CommandType::SET){
+               store[cmd.key] = cmd.value;
+
+          }
+
+          else if(cmd.type == CommandType::GET){
+               if(store.find(cmd.key)!=store.end())
+                  cmd.result.set_value(store[cmd.key]);
+               else
+                 cmd.result.set_value("");
+          }
+          else if(cmd.type == CommandType::DEL){
+               store.erase(cmd.key);
+
+          }
+     }
+}
+
+
+
 void RedisLite::set(const std::string &key, const std::string &value){
-     std::lock_guard<std::mutex> lock(mtx);
-     store[key]  = value;
+     Command cmd;
+     cmd.type = CommandType::SET;
+     cmd.key = key;
+     cmd.value = value;
+     {
+     std::lock_guard<std::mutex> lock(queueMutex);
+     commandQueue.push(std::move(cmd));
+     }
+     cv.notify_one();
 }
 
 std:: string RedisLite::get(const std::string &key){
-     std:: lock_guard<std::mutex> lock(mtx);
-     if(store.find(key)!= store.end()){
-        return store[key];
+     Command cmd;
+     cmd.type = CommandType::GET;
+     cmd.key = key;
+
+     std::future<std::string> fut = cmd.result.get_future();
+     {
+     std:: lock_guard<std::mutex> lock(queueMutex);
+     commandQueue.push(std::move(cmd));
      }
-     return " "; //not found
+     cv.notify_one();
+
+     return fut.get();
 }
 
 void RedisLite::del(const std::string &key){
-    std::lock_guard<std::mutex> lock(mtx);
-     store.erase(key);
+    Command cmd;
+    cmd.type = CommandType::DEL;
+    cmd.key = key;
+    {
+    std::lock_guard<std::mutex> lock(queueMutex);
+     commandQueue.push(std::move(cmd));
+    }
+    cv.notify_one();
 }
