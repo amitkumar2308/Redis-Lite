@@ -171,6 +171,39 @@ Redis-Lite/
 - [ ] Network interface support (TCP server)
 - [ ] Benchmark suite for performance testing
 
++--------------------+
+|   Client Threads   |
+| (SET / GET / DEL)  |
++---------+----------+
+          |
+          |  push Command
+          v
++--------------------+
+|   Command Queue    |   <-- protected by mutex
+|  (FIFO structure) |
++---------+----------+
+          |
+          |  notify_one()
+          v
++--------------------+
+|   Worker Thread    |   <-- single-threaded event loop
+|  (workerLoop)     |
++---------+----------+
+          |
+          |  serialized execution
+          v
++--------------------+
+|   In-Memory Store  |
+| unordered_map<K,V>|
++--------------------+
+          |
+          | (GET result via promise/future)
+          v
++--------------------+
+|  Client Thread     |
++--------------------+
+
+
 ## 📝 License
 
 This is an educational project demonstrating concurrent programming concepts in C++.
