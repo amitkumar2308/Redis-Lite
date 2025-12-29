@@ -1,196 +1,45 @@
 # Redis-Lite
 
-A lightweight, thread-safe, in-memory key-value store implementation in C++ inspired by Redis. This project demonstrates concurrent programming concepts including mutex locks, thread synchronization, and safe data structure access.
+Redis-Lite is a learning-focused, Redis-inspired in-memory key–value store written in C++.  
+This project was built to understand what *backend actually means* beyond APIs and databases.
 
-## 🚀 Features
+While working on backend web applications, I realized that although I could build APIs and connect databases, I did not clearly understand backend fundamentals like concurrency, CPU usage, race conditions, latency, and scalability.  
+Redis was often mentioned as a “cache”, but how it really works internally and why it improves performance was not clear to me.
 
-- **Thread-Safe Operations**: All operations (SET, GET, DEL) are protected with mutex locks
-- **In-Memory Storage**: Fast key-value storage using `std::unordered_map`
-- **Concurrent Access**: Multiple threads can safely access the store simultaneously
-- **Simple API**: Clean and intuitive interface for basic Redis-like operations
-- **Lightweight**: Minimal dependencies, uses only C++ Standard Library
+So I decided to build a minimal Redis-like system from scratch to understand:
+- Why Redis keeps data in memory
+- Why Redis follows a single-threaded execution model
+- How serialization prevents race conditions
+- How latency is reduced by avoiding repeated database access
 
-## 📋 Architecture
+Redis-Lite stores data in memory using an unordered_map and processes all operations through a single worker thread.  
+Multiple client threads can send requests, but only one worker thread executes them, ensuring correctness and avoiding race conditions.
 
-### Core Components
+The core idea is simple:  
+**mutex alone does not guarantee correctness, design does**.
 
-#### RedisLite Class
-The main class that provides the key-value store functionality:
-
-```cpp
-class RedisLite {
-private:
-    std::unordered_map<std::string, std::string> store;  // Key-value storage
-    std::queue<Command> commandQueue;                     // Command queue (for future async processing)
-    std::mutex queueMutex;                                // Queue synchronization
-    std::condition_variable cv;                           // Condition variable for worker thread
-    std::thread worker;                                   // Background worker thread
-    bool stop;                                            // Stop flag for worker thread
-
-public:
-    void set(const std::string &key, const std::string &value);
-    std::string get(const std::string &key);
-    void del(const std::string &key);
-};
-```
-
-#### Command Structure
-Defines the command types for potential asynchronous processing:
-
-```cpp
-enum class CommandType {
-    SET,
-    GET,
-    DEL
-};
-
-struct Command {
-    CommandType type;
-    std::string key;
-    std::string value;
-};
-```
-
-## 🔧 API Reference
-
-### `void set(const std::string &key, const std::string &value)`
-Stores a key-value pair in the database.
-- **Thread-Safe**: Yes
-- **Parameters**:
-  - `key`: The key to store
-  - `value`: The value to associate with the key
-- **Returns**: void
-
-### `std::string get(const std::string &key)`
-Retrieves the value associated with a key.
-- **Thread-Safe**: Yes
-- **Parameters**:
-  - `key`: The key to retrieve
-- **Returns**: The value if found, empty string `" "` if not found
-
-### `void del(const std::string &key)`
-Deletes a key-value pair from the database.
-- **Thread-Safe**: Yes
-- **Parameters**:
-  - `key`: The key to delete
-- **Returns**: void
-
-## 💻 Usage Example
-
-```cpp
-#include "RedisLite.h"
-#include <thread>
-#include <iostream>
-
-void threadFuncSet(RedisLite &redis, const std::string &key, const std::string &value) {
-    redis.set(key, value);
-}
-
-void threadFuncGet(RedisLite &redis, const std::string &key) {
-    std::cout << key << ":" << redis.get(key) << std::endl;
-}
-
-int main() {
-    RedisLite redis;
-
-    // Create multiple threads to set values
-    std::thread t1(threadFuncSet, std::ref(redis), "user1", "amit");
-    std::thread t2(threadFuncSet, std::ref(redis), "user2", "sanjay");
-    
-    t1.join();
-    t2.join();
-
-    // Retrieve values from multiple threads
-    std::thread t3(threadFuncGet, std::ref(redis), "user1");
-    std::thread t4(threadFuncGet, std::ref(redis), "user2");
-    
-    t3.join();
-    t4.join();
-
-    return 0;
-}
-```
-
-## 🛠️ Compilation & Running
-
-### Prerequisites
-- C++11 or later
-- GCC/Clang/MSVC compiler with C++11 support
-
-### Compile
-```bash
-# Using g++
-g++ -std=c++11 -pthread main.cpp RedisLite.cpp -o redis-lite
-
-# Using clang++
-clang++ -std=c++11 -pthread main.cpp RedisLite.cpp -o redis-lite
-
-# On Windows with MSVC
-cl /EHsc /std:c++11 main.cpp RedisLite.cpp /Fe:redis-lite.exe
-```
-
-### Run
-```bash
-# Linux/Mac
-./redis-lite
-
-# Windows
-redis-lite.exe
-```
-
-## 🔒 Thread Safety
-
-All public methods (`set`, `get`, `del`) use `std::lock_guard<std::mutex>` to ensure thread-safe access to the underlying data store. This prevents race conditions when multiple threads access the store concurrently.
-
-**Note**: There's a minor inconsistency in the current implementation - the header file declares `queueMutex` but the implementation uses `mtx`. This should be aligned for consistency.
-
-## 📁 Project Structure
-
-```
-Redis-Lite/
-├── RedisLite.h       # Header file with class declaration
-├── RedisLite.cpp     # Implementation of RedisLite methods
-├── main.cpp          # Example usage and testing
-└── README.md         # This file
-```
-
-## 🚧 Known Issues & Future Enhancements
-
-### Current Issues
-1. **Mutex naming inconsistency**: Header declares `queueMutex` but implementation uses `mtx`
-2. **Worker thread not implemented**: The `workerLoop()` method and worker thread are declared but not implemented
-3. **Command queue unused**: The command queue structure is defined but not utilized
-
-### Planned Features
-- [ ] Implement asynchronous command processing with worker thread
-- [ ] Add TTL (Time To Live) support for keys
-- [ ] Implement additional Redis commands (INCR, DECR, LPUSH, RPUSH, etc.)
-- [ ] Add persistence (save to disk/load from disk)
-- [ ] Implement pub/sub messaging
-- [ ] Add command-line interface (CLI)
-- [ ] Network interface support (TCP server)
-- [ ] Benchmark suite for performance testing
+Architecture (conceptual flow):
 
 +--------------------+
 |   Client Threads   |
 | (SET / GET / DEL)  |
 +---------+----------+
           |
-          |  push Command
+          | push Command
           v
 +--------------------+
-|   Command Queue    |   <-- protected by mutex
-|  (FIFO structure) |
+|   Command Queue    |   (protected by mutex)
+|     FIFO Queue     |
 +---------+----------+
           |
-          |  notify_one()
+          | notify_one()
           v
 +--------------------+
-|   Worker Thread    |   <-- single-threaded event loop
-|  (workerLoop)     |
+|   Worker Thread    |
+|   (workerLoop)    |
 +---------+----------+
           |
-          |  serialized execution
+          | serialized execution
           v
 +--------------------+
 |   In-Memory Store  |
@@ -203,15 +52,42 @@ Redis-Lite/
 |  Client Thread     |
 +--------------------+
 
+Each client request (SET, GET, DEL) is converted into a Command object and pushed into a thread-safe queue.  
+A single worker thread continuously waits on a condition variable, pops commands one by one, and executes them serially.  
+Because only the worker thread accesses the data store, race conditions are avoided without complex locking logic.
 
-## 📝 License
+For GET operations, std::promise and std::future are used so that the client thread can safely wait for the result produced by the worker thread.
 
-This is an educational project demonstrating concurrent programming concepts in C++.
+This design is inspired by Redis’s internal model where correctness and predictability are preferred over uncontrolled parallelism.
 
-## 👨‍💻 Author
+Example usage:
 
-Built as a learning project to understand:
-- Thread synchronization in C++
-- Mutex and lock guards
-- Concurrent data structure access
-- Redis-like key-value store design
+RedisLite redis;
+
+std::thread t1([&](){ redis.set("user1", "amit"); });
+std::thread t2([&](){ redis.set("user2", "sanjay"); });
+
+t1.join();
+t2.join();
+
+std::thread t3([&](){
+    std::cout << redis.get("user1") << std::endl;
+});
+
+t3.join();
+
+Build and run (C++17):
+
+g++ -std=c++17 main.cpp RedisLite.cpp -o redis-lite
+./redis-lite
+
+This project is intentionally minimal and educational.  
+It does not implement networking, persistence, TTL, or advanced Redis data structures.  
+The focus is purely on understanding concurrency, serialization, and in-memory data access.
+
+By building Redis-Lite, I now clearly understand why Redis exists, how it reduces latency compared to database calls, and how backend scalability problems are solved at the system-design level rather than just frameworks.
+
+This project represents my transition from  
+“I can build backend apps”  
+to  
+“I understand how backend systems actually work.”
