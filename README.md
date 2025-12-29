@@ -12,6 +12,19 @@ A lightweight, thread-safe, in-memory key-value store implementation in C++ insp
 
 ## 📋 Architecture
 
+![Redis-Lite Architecture](redislite_architecture.png)
+
+### System Design
+
+The Redis-Lite architecture follows a producer-consumer pattern with a single worker thread processing all commands serially. This design ensures thread safety and prevents race conditions without complex locking mechanisms.
+
+**How it works:**
+1. Multiple client threads can call SET, GET, or DEL operations concurrently
+2. Each operation creates a Command object and pushes it to a thread-safe queue
+3. A single worker thread processes commands one by one in FIFO order
+4. For GET operations, results are returned asynchronously using promise/future pattern
+5. The data store is only accessed by the worker thread, eliminating race conditions
+
 ### Core Components
 
 #### RedisLite Class
