@@ -6,6 +6,7 @@
 #include<mutex>
 #include<condition_variable>
 #include<future>
+
 enum class CommandType{
    SET,
    GET,
@@ -17,7 +18,7 @@ struct Command{
    std::string key;
    std::string value;
 
-   std::promise<std::string> result;
+   std::promise<std::string> result; //only use for GET
 };
 
 class RedisLite{

@@ -1,6 +1,14 @@
 #include "RedisLite.h"
+#include <iostream>
+#include <unordered_map>
+#include <queue>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <string>
 
 RedisLite::RedisLite(){
+     stop = false;
      worker = std::thread(&RedisLite::workerLoop,this);
 }
 
@@ -22,11 +30,17 @@ void RedisLite::workerLoop(){
                 return !commandQueue.empty() || stop;
                });
 
-               if(stop && commandQueue.empty())
-               break;
+               if (stop) {
+    while (!commandQueue.empty()) {
+        Command &c = commandQueue.front();
+        if (c.type == CommandType::GET) {
+            c.result.set_value("");
+        }
+        commandQueue.pop();
+    }
+    break;
+}
 
-               cmd = std::move(commandQueue.front());
-               commandQueue.pop();
 
           }
 
