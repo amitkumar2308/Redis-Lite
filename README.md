@@ -216,10 +216,7 @@ This project is a foundation for more advanced features:
 
 ---
 
-## Resume-Ready Summary
 
-> **Redis-Lite** – Lightweight in-memory key–value store in C++  
-> Designed and implemented a Redis-inspired single-threaded command execution engine using producer–consumer concurrency patterns. Synchronized multiple client threads with a worker thread using `std::mutex`, `std::condition_variable`, and `std::promise` / `std::future`. Stress tested with 10,000 concurrent operations (~700 ms latency). Gained hands-on experience with thread synchronization, lock-free design principles, and performance profiling.
 
 ---
 
